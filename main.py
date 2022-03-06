@@ -1,45 +1,88 @@
+import os
 import sys
-import time
+import yaml
+import argparse
+
+from glob import glob
 
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 from PyQt5 import QtWidgets
 
 from utils import VideoQThread
+from utils import ImageQThread
+from utils import YAML2argparse
 
 if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
 if hasattr(QtCore.Qt, 'AA_EnableHighDpiScaling'):
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    
+parser = argparse.ArgumentParser()
+parser.add_argument("--config", type=str, help="Path to config file")
 
 
 class App(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, args):
         super().__init__()
+        self.__args = args
         self.__key_ctrl = False
-        self.video_thread = VideoQThread()
+        self.thread = QtCore.QThread()
+        self.image_thread = ImageQThread(args.image_delay)
+        self.video_thread = VideoQThread(args.video_fps)
+        
+        self.__file_list = glob(os.path.join(args.directory, "*"))
         
         self.init_ui()
         self.run()
         
     def init_ui(self):
-        self.resize(1920, 1080)
-        self.showFullScreen()
+        self.resize(
+            self.__args.resolution[0],
+            self.__args.resolution[1]
+        )
+        # self.showFullScreen()
         
         self.main_frame = QtWidgets.QLabel(self)
-        self.main_frame.resize(1920, 1080)
+        self.main_frame.resize(
+            self.__args.resolution[0],
+            self.__args.resolution[1]
+        )
         
-        self.video_thread.video_file = "./test/test.mp4"
-        self.video_thread.frame_size = (self.size().width(), self.size().height())
+        self.image_thread.frame_size = (
+            self.__args.resolution[0],
+            self.__args.resolution[1]
+        )
+        self.video_thread.frame_size = (
+            self.__args.resolution[0],
+            self.__args.resolution[1]
+        )
         
-        self.show()
+        self.showFullScreen()
         
     def run(self):
-        self.thread_pool = QtCore.QThreadPool()
-        self.thread_pool.setMaxThreadCount(2)
-        self.video_thread.frame_signal.frame_signal.connect(self.update_frame)
-        self.thread_pool.start(self.video_thread)
+        for file in self.__file_list:
+            ext = file.split(".")[-1]
+            if ext in self.__args.image_ext:
+                self.worker = self.image_thread
+                self.image_thread.frame_signal.connect(self.update_frame)
+                self.image_thread.moveToThread(self.thread)
+                self.thread.started.connect(self.image_thread.run)
+            else:
+                self.worker = self.video_thread
+                self.video_thread.frame_signal.connect(self.update_frame)
+                self.video_thread.moveToThread(self.thread)
+                self.thread.started.connect(self.video_thread.run)
+
+        self.finished.connect(self.stop_thread)
+        self.thread.start()
+        self.show()
+        
+    def stop_thread(self):
+        self.worker.stop()
+        self.thread.quit()
+        self.thread.wait()
         
     @QtCore.pyqtSlot(QtGui.QImage)
     def update_frame(self, image):
@@ -59,6 +102,12 @@ class App(QtWidgets.QWidget):
 
 
 if __name__ == "__main__":
+    args = parser.parse_args()
+    with open(args.config, "r") as _file:
+        config = yaml.safe_load(_file)
+        
+    YAML2argparse.parse_yaml(config, args)
+
     app = QtWidgets.QApplication(sys.argv)
-    ex = App()
-    app.exec_()
+    ex = App(args)
+    sys.exit(app.exec_())

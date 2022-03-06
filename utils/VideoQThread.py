@@ -1,17 +1,18 @@
 import cv2
 
+from time import sleep
 from PyQt5 import QtGui
 from PyQt5 import QtCore
-from .__CallbackSignal__ import CallbackSignal
 
 
-class VideoQThread(QtCore.QRunnable):
+class VideoQThread(QtCore.QObject):
+    frame_signal = QtCore.pyqtSignal(QtGui.QImage)
     
-    def __init__(self):
+    def __init__(self, default_fps=30.0):
         super().__init__()
         self.__video_file = None
         self.__frame_size = (1920, 1080)
-        self.frame_signal = CallbackSignal()
+        self.__default_fps = default_fps
         
     @property
     def video_file(self):
@@ -33,6 +34,8 @@ class VideoQThread(QtCore.QRunnable):
         
     def run(self):
         cap = cv2.VideoCapture(self.video_file)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = fps if fps else self.__default_fps
         while True:
             ret, frame = cap.read()
             if ret:
@@ -41,4 +44,5 @@ class VideoQThread(QtCore.QRunnable):
                 bytes_per_line = ch * w
                 qt_frame = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
                 qt_image = qt_frame.scaled(self.__frame_size[0], self.__frame_size[1], QtCore.Qt.KeepAspectRatio)
-                self.frame_signal.frame_signal.emit(qt_image)
+                self.frame_signal.emit(qt_image)
+                sleep(1 / fps)

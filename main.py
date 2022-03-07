@@ -29,8 +29,6 @@ class App(QtWidgets.QWidget):
         self.__args = args
         self.__key_ctrl = False
         self.thread = QtCore.QThread()
-        self.image_thread = ImageQThread(args.image_delay)
-        self.video_thread = VideoQThread(args.video_fps)
         
         self.__file_list = glob(os.path.join(args.directory, "*"))
         
@@ -50,36 +48,47 @@ class App(QtWidgets.QWidget):
             self.__args.resolution[1]
         )
         
-        self.image_thread.frame_size = (
-            self.__args.resolution[0],
-            self.__args.resolution[1]
-        )
-        self.video_thread.frame_size = (
-            self.__args.resolution[0],
-            self.__args.resolution[1]
-        )
-        
         self.showFullScreen()
         
     def run(self):
         for file in self.__file_list:
             ext = file.split(".")[-1]
+            print(ext)
             if ext in self.__args.image_ext:
-                self.worker = self.image_thread
-                self.image_thread.frame_signal.connect(self.update_frame)
-                self.image_thread.moveToThread(self.thread)
-                self.thread.started.connect(self.image_thread.run)
+                self.worker = ImageQThread(
+                    file,
+                    (
+                        self.__args.resolution[0],
+                        self.__args.resolution[1]
+                    ),
+                    self.__args.image_delay
+                )
+                self.worker.image_file = file
+                self.worker.frame_signal.connect(self.update_frame)
+                self.worker.done_signal.connect(self.thread.quit)
+                self.worker.moveToThread(self.thread)
+                self.thread.started.connect(self.worker.run)
             else:
-                self.worker = self.video_thread
-                self.video_thread.frame_signal.connect(self.update_frame)
-                self.video_thread.moveToThread(self.thread)
-                self.thread.started.connect(self.video_thread.run)
+                self.worker = VideoQThread(
+                    file,
+                    (
+                        self.__args.resolution[0],
+                        self.__args.resolution[1]
+                    ),
+                    args.video_fps
+                )
+                self.worker.video_file = file
+                self.worker.frame_signal.connect(self.update_frame)
+                self.worker.done_signal.connect(self.thread.quit)
+                self.worker.moveToThread(self.thread)
+                self.thread.started.connect(self.worker.run)
 
-        self.finished.connect(self.stop_thread)
+        self.thread.finished.connect(self.stop_thread)
         self.thread.start()
         self.show()
         
     def stop_thread(self):
+        print("Thread stopped")
         self.worker.stop()
         self.thread.quit()
         self.thread.wait()
@@ -103,10 +112,8 @@ class App(QtWidgets.QWidget):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    with open(args.config, "r") as _file:
-        config = yaml.safe_load(_file)
         
-    YAML2argparse.parse_yaml(config, args)
+    YAML2argparse.parse_yaml(args.config, args)
 
     app = QtWidgets.QApplication(sys.argv)
     ex = App(args)

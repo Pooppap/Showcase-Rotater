@@ -7,36 +7,19 @@ from PyQt5 import QtCore
 
 class VideoQThread(QtCore.QObject):
     frame_signal = QtCore.pyqtSignal(QtGui.QImage)
+    done_signal = QtCore.pyqtSignal()
     
-    def __init__(self, default_fps=30.0):
+    def __init__(self, video_file, frame_size, default_fps=30.0):
         super().__init__()
-        self.__video_file = None
-        self.__frame_size = (1920, 1080)
+        self.__video_file = video_file
+        self.__frame_size = frame_size
         self.__default_fps = default_fps
-        
-    @property
-    def video_file(self):
-        return self.__video_file
-    
-    @video_file.setter
-    def video_file(self, value):
-        assert isinstance(value, str)
-        self.__video_file = value
-        
-    @property
-    def frame_size(self):
-        return self.__frame_size
-    
-    @frame_size.setter
-    def frame_size(self, value):
-        assert isinstance(value, (tuple, list))
-        self.__frame_size = value
         
     def run(self):
         cap = cv2.VideoCapture(self.video_file)
         fps = cap.get(cv2.CAP_PROP_FPS)
         fps = fps if fps else self.__default_fps
-        while True:
+        while(cap.isOpened()):
             ret, frame = cap.read()
             if ret:
                 rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -46,3 +29,9 @@ class VideoQThread(QtCore.QObject):
                 qt_image = qt_frame.scaled(self.__frame_size[0], self.__frame_size[1], QtCore.Qt.KeepAspectRatio)
                 self.frame_signal.emit(qt_image)
                 sleep(1 / fps)
+                
+            else:
+                break
+            
+        cap.release()
+        self.done_signal.emit()

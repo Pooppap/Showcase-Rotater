@@ -7,32 +7,15 @@ from PyQt5 import QtCore
 from pdf2image import convert_from_path
 
 
-class VideoQThread(QtCore.QObject):
+class ImageQThread(QtCore.QObject):
     frame_signal = QtCore.pyqtSignal(QtGui.QImage)
+    done_signal = QtCore.pyqtSignal()
     
-    def __init__(self, default_delay=30.0):
+    def __init__(self, image_file, frame_size, default_delay=30.0):
         super().__init__()
-        self.__image_file = None
-        self.__frame_size = (1920, 1080)
+        self.__image_file = image_file
+        self.__frame_size = frame_size
         self.__default_delay = default_delay
-        
-    @property
-    def image_file(self):
-        return self.__image_file
-    
-    @image_file.setter
-    def image_file(self, value):
-        assert isinstance(value, str)
-        self.__image_file = value
-        
-    @property
-    def frame_size(self):
-        return self.__frame_size
-    
-    @frame_size.setter
-    def frame_size(self, value):
-        assert isinstance(value, (tuple, list))
-        self.__frame_size = value
         
     def run(self):
         ext = self.image_file.split('.')[-1]
@@ -49,3 +32,4 @@ class VideoQThread(QtCore.QObject):
         qt_image = qt_frame.scaled(self.__frame_size[0], self.__frame_size[1], QtCore.Qt.KeepAspectRatio)
         self.frame_signal.emit(qt_image)
         sleep(self.__default_delay)
+        self.done_signal.emit()

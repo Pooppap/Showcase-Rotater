@@ -9,14 +9,32 @@ class VideoQThread(QtCore.QObject):
     frame_signal = QtCore.pyqtSignal(QtGui.QImage)
     done_signal = QtCore.pyqtSignal()
     
-    def __init__(self, video_file, frame_size, default_fps=30.0):
+    def __init__(self, default_fps=30.0):
         super().__init__()
-        self.__video_file = video_file
-        self.__frame_size = frame_size
+        self.__file = None
+        self.__frame_size = None
         self.__default_fps = default_fps
         
+    @property
+    def file(self):
+        return self.__file
+
+    @file.setter
+    def file(self, value):
+        assert isinstance(value, str)
+        self.__file = value
+
+    @property
+    def frame_size(self):
+        return self.__frame_size
+
+    @frame_size.setter
+    def frame_size(self, value):
+        assert isinstance(value, (tuple, list))
+        self.__frame_size = value
+        
     def run(self):
-        cap = cv2.VideoCapture(self.video_file)
+        cap = cv2.VideoCapture(self.file)
         fps = cap.get(cv2.CAP_PROP_FPS)
         fps = fps if fps else self.__default_fps
         while(cap.isOpened()):

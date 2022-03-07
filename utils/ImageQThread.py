@@ -11,19 +11,37 @@ class ImageQThread(QtCore.QObject):
     frame_signal = QtCore.pyqtSignal(QtGui.QImage)
     done_signal = QtCore.pyqtSignal()
     
-    def __init__(self, image_file, frame_size, default_delay=30.0):
+    def __init__(self, default_delay=30.0):
         super().__init__()
-        self.__image_file = image_file
-        self.__frame_size = frame_size
+        self.__file = None
+        self.__frame_size = None
         self.__default_delay = default_delay
         
+    @property
+    def file(self):
+        return self.__file
+
+    @file.setter
+    def file(self, value):
+        assert isinstance(value, str)
+        self.__file = value
+
+    @property
+    def frame_size(self):
+        return self.__frame_size
+
+    @frame_size.setter
+    def frame_size(self, value):
+        assert isinstance(value, (tuple, list))
+        self.__frame_size = value
+        
     def run(self):
-        ext = self.image_file.split('.')[-1]
+        ext = self.file.split('.')[-1]
         if ext == "pdf":
-            image = convert_from_path(self.image_file)
+            image = convert_from_path(self.file)
             image = np.asanyarray(image[0])
         else:
-            image = cv2.imread(self.image_file)
+            image = cv2.imread(self.file)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         h, w, ch = image.shape

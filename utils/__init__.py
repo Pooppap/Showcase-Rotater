@@ -1,2 +1,1 @@
-from .VideoQThread import VideoQThread
-from .ImageQThread import ImageQThread
+from .RenderQThread import RenderQThread

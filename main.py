@@ -9,8 +9,7 @@ from PyQt5 import QtGui
 from PyQt5 import QtCore
 from PyQt5 import QtWidgets
 
-from utils import VideoQThread
-from utils import ImageQThread
+from utils import RenderQThread
 from utils import YAML2argparse
 
 if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
@@ -26,26 +25,28 @@ parser.add_argument("--config", type=str, help="Path to config file")
 class App(QtWidgets.QWidget):
     def __init__(self, args):
         super().__init__()
-        self.__idx = 0
         self.__args = args
         self.__key_ctrl = False
         self.__thread = QtCore.QThread()
-        self.__video_thread = VideoQThread(args.video_fps)
-        self.__image_thread = ImageQThread(args.image_delay)
         
-        self.__file_list = glob(
+        file_list = glob(
             os.path.join(
                 args.directory,
                 "*"
             )
         )
-        
-        # self.__file = self.__file_list[0]
+        self.__render_thread = RenderQThread(
+            file_list,
+            args.video_fps,
+            args.image_delay,
+            args.transition_delay
+        )
+        self.__render_thread.pdf_ext = args.pdf_ext
+        self.__render_thread.image_ext = args.image_ext
+        self.__render_thread.video_ext = args.video_ext
+        self.__render_thread.frame_size = args.resolution
         
         self.init_ui()
-        # self.__transition = False
-        # self.__effect = QtWidgets.QGraphicsOpacityEffect()
-        # self.main_frame.setGraphicsEffect(self.__effect)
         
         self.run()
         
@@ -54,7 +55,6 @@ class App(QtWidgets.QWidget):
             self.__args.resolution[0],
             self.__args.resolution[1]
         )
-        # self.showFullScreen()
         
         self.main_frame = QtWidgets.QLabel(self)
         self.main_frame.resize(
@@ -63,57 +63,15 @@ class App(QtWidgets.QWidget):
         )
         self.main_frame.setAlignment(QtCore.Qt.AlignCenter)
         
-        self.__image_thread.frame_size = (
-            self.__args.resolution[0],
-            self.__args.resolution[1]
-        )
-        self.__video_thread.frame_size = (
-            self.__args.resolution[0],
-            self.__args.resolution[1]
-        )
-        
         self.showFullScreen()
         
     def run(self):
-        ext = self.__file.split(".")[-1]
-        if ext in self.__args.image_ext:
-            self.worker = self.__image_thread
-        else:
-            self.worker = self.__video_thread
-
-        self.worker.file = self.__file
-        self.worker.frame_signal.connect(self.update_frame)
-        self.worker.moveToThread(self.__thread)
-        self.__thread.started.connect(self.worker.run)
+        self.__render_thread.frame_signal.connect(self.update_frame)
+        self.__render_thread.moveToThread(self.__thread)
+        self.__thread.started.connect(self.__render_thread.run)
 
         self.__thread.start()
         self.show()
-        
-    # def next_file(self):
-    #     # self.fade_out()
-    #     self.__thread.quit()
-        
-    #     self.__idx += 1
-    #     if self.__idx == len(self.__file_list):
-    #         self.__idx = 0
-        
-    #     print(self.__idx)
-    #     self.__file = self.__file_list[self.__idx]
-    #     self.run()
-        
-    # def fade_in(self):
-    #     self.animation = QtCore.QPropertyAnimation(self.__effect, b"opacity")
-    #     self.animation.setDuration(1000)
-    #     self.animation.setStartValue(0)
-    #     self.animation.setEndValue(1)
-    #     self.animation.start()
-        
-    # def fade_out(self):
-    #     self.animation = QtCore.QPropertyAnimation(self.__effect, b"opacity")
-    #     self.animation.setDuration(1000)
-    #     self.animation.setStartValue(1)
-    #     self.animation.setEndValue(0)
-    #     self.animation.start()
         
     @QtCore.pyqtSlot(QtGui.QImage)
     def update_frame(self, image):
@@ -130,6 +88,7 @@ class App(QtWidgets.QWidget):
             
         if event.key() == QtCore.Qt.Key_Q:
             if self.__key_ctrl:
+                self.__thread.quit()
                 self.close()
 
 

@@ -1,6 +1,5 @@
 import os
 import sys
-import yaml
 import argparse
 
 from glob import glob
@@ -76,7 +75,6 @@ class App(QtWidgets.QWidget):
     @QtCore.pyqtSlot(QtGui.QImage)
     def update_frame(self, image):
         self.main_frame.setPixmap(QtGui.QPixmap.fromImage(image))
-        # self.fade_in()
         
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Control:
@@ -94,7 +92,6 @@ class App(QtWidgets.QWidget):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-        
     YAML2argparse.parse_yaml(args.config, args)
 
     app = QtWidgets.QApplication(sys.argv)

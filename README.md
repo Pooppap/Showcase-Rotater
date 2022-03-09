@@ -23,7 +23,7 @@ PyYAML==6.0
 ## How to run it?
 1. Create a folder called ```data``` on the project root folder.
 2. Put images, PDFs, and videos into that ```data``` folder.
-
+3. Run:
 ```bash
-3. python3 main.py --config ./configs/main.conf
+python3 main.py --config ./configs/main.conf
 ```

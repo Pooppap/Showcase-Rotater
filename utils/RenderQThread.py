@@ -99,6 +99,7 @@ class RenderQThread(QtCore.QObject):
         else:
             new_width = self.frame_size[0]
             new_height = self.frame_size[1]
+            diff = image_width - new_width
         
         if diff > 0:
             interpolation = cv2.INTER_AREA

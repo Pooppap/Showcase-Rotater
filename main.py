@@ -8,6 +8,7 @@ from PyQt5 import QtGui
 from PyQt5 import QtCore
 from PyQt5 import QtWidgets
 
+from utils import SyncerQThread
 from utils import RenderQThread
 from utils import YAML2argparse
 
@@ -19,14 +20,21 @@ if hasattr(QtCore.Qt, 'AA_EnableHighDpiScaling'):
     
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str, help="Path to config file")
+parser.add_argument("--network_config", type=str, help="Path to network config file")
 
 
 class App(QtWidgets.QWidget):
-    def __init__(self, args):
+    pause_signal = QtCore.pyqtSignal()
+    resume_signal = QtCore.pyqtSignal()
+
+    def __init__(self, args, network_args):
         super().__init__()
         self.__args = args
         self.__key_ctrl = False
-        self.__thread = QtCore.QThread()
+        self.__thread_1 = QtCore.QThread()
+        self.__thread_2 = QtCore.QThread()
+        
+        self.init_ui()
         
         file_list = glob(
             os.path.join(
@@ -34,6 +42,16 @@ class App(QtWidgets.QWidget):
                 "*"
             )
         )
+        self.__syncer_thread = SyncerQThread(args.directory, network_args)
+        self.__syncer_thread.pause_signal.connect(self.pause_render)
+        self.__syncer_thread.resume_signal.connect(self.resume_render)
+        
+        hashes = self.__syncer_thread.hashes
+        self.run_syncer()
+        
+        if not hashes:
+            sleep
+        
         self.__render_thread = RenderQThread(
             file_list,
             args.video_fps,
@@ -45,9 +63,10 @@ class App(QtWidgets.QWidget):
         self.__render_thread.video_ext = args.video_ext
         self.__render_thread.frame_size = args.resolution
         
-        self.init_ui()
+        self.pause_signal.connect(self.__render_thread.pause_render)
+        self.resume_signal.connect(self.__render_thread.resume_render)
         
-        self.run()
+        self.run_render()
         
     def init_ui(self):
         self.resize(
@@ -64,17 +83,30 @@ class App(QtWidgets.QWidget):
         
         self.showFullScreen()
         
-    def run(self):
+    def run_syncer(self):
+        self.__syncer_thread.moveToThread(self.__thread_2)
+        self.__thread_2.started.connect(self.__syncer_thread.run)
+        self.__thread_2.start()
+        
+    def run_render(self):
         self.__render_thread.frame_signal.connect(self.update_frame)
-        self.__render_thread.moveToThread(self.__thread)
-        self.__thread.started.connect(self.__render_thread.run)
+        self.__render_thread.moveToThread(self.__thread_1)
+        self.__thread_1.started.connect(self.__render_thread.run)
 
-        self.__thread.start()
+        self.__thread_1.start()
         self.show()
         
     @QtCore.pyqtSlot(QtGui.QImage)
     def update_frame(self, image):
         self.main_frame.setPixmap(QtGui.QPixmap.fromImage(image))
+        
+    @QtCore.pyqtSlot()
+    def pause_render(self):
+        self.pause_signal.emit()
+    
+    @QtCore.pyqtSlot()
+    def resume_render(self):
+        self.resume_signal.emit()
         
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Control:
@@ -86,14 +118,17 @@ class App(QtWidgets.QWidget):
             
         if event.key() == QtCore.Qt.Key_Q:
             if self.__key_ctrl:
-                self.__thread.quit()
+                self.__thread_1.quit()
                 self.close()
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     YAML2argparse.parse_yaml(args.config, args)
+    
+    network_args = parser.parse_args("")
+    YAML2argparse.parse_yaml(args.network_config, network_args)
 
     app = QtWidgets.QApplication(sys.argv)
-    ex = App(args)
+    ex = App(args, network_args)
     sys.exit(app.exec_())

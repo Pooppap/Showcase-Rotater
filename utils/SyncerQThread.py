@@ -3,6 +3,7 @@ import yaml
 import socket
 import imohash
 
+from glob import glob
 from time import sleep
 from shutil import move
 from PyQt5 import QtCore
@@ -13,13 +14,12 @@ from smb.SMBConnection import SMBConnection
 default_file = {
     "hash"
     "last_modified": 0.0,
-    "local_path": None
 }
 
 
 class SyncerQThread(QtCore.QObject):
     pause_signal = QtCore.pyqtSignal()
-    resume_signal = QtCore.pyqtSignal()
+    resume_signal = QtCore.pyqtSignal(list)
 
     def __init__(self, local_folder, network_config, hashes_file=None):
         super().__init__()
@@ -42,13 +42,54 @@ class SyncerQThread(QtCore.QObject):
             hashes = yaml.safe_load(_file)
             
         self.__hashes = hashes if hashes is not None else {}
-        
-    @property
-    def hashes(self):
-        return self.__hashes
-            
-    def check_file_condition(self, last_modified, local_file):
+        if self.__hashes:
+            self.__file_list = [os.path.join(local_folder, key) for key in self.__hashes.keys()]
+        else:
+            self.__file_list = []
 
+        file_list = set(self.__file_list)
+        local_list = glob(
+            os.path.join(
+                local_folder,
+                "*"
+            )
+        )
+        local_list = set(local_list)
+        
+        delete_list = file_list - local_list
+        for file in delete_list:
+            filename = file.split(os.sep)[-1]
+            self.__hashes.pop(filename, None)
+            idx = self.__file_list.index(file)
+            del self.__file_list[idx]
+
+        update_list = file_list.intersection(local_list)
+        for file in update_list:
+            filename = file.split(os.sep)[-1]
+            hash = imohash.hashfile(file)
+            if hash != self.__hashes[filename]["hash"]:
+                mtime = os.path.getmtime(file)
+                ctime = os.path.getctime(file)
+                last_modified = mtime if mtime > ctime else ctime
+                self.__hashes[filename] = {
+                    "hash": hash,
+                    "last_modified": last_modified,
+                }
+
+        add_list = local_list - file_list
+        for file in add_list:
+            filename = file.split(os.sep)[-1]
+            hash = imohash.hashfile(file)
+            mtime = os.path.getmtime(file)
+            ctime = os.path.getctime(file)
+            last_modified = mtime if mtime > ctime else ctime
+            self.__hashes[filename] = {
+                "hash": hash,
+                "last_modified": last_modified,
+            }
+            self.__file_list.append(file)
+
+    def check_file_condition(self, last_modified, local_file):
         if last_modified > local_file["last_modified"]:
             return True
         
@@ -68,6 +109,7 @@ class SyncerQThread(QtCore.QObject):
         return temp_file
             
     def run(self):
+        self.resume_signal.emit(self.__file_list)
         while True:
             network_files = self.__conn.listPath(self.__smb_share, self.__smb_folder)
             network_files = [file for file in network_files if file.filename not in ['.', '..']]
@@ -91,15 +133,18 @@ class SyncerQThread(QtCore.QObject):
                 self.pause_signal.emit()
                 for filename, file, hash, last_modified in temp_files:
                     move(file, self.__local_folder)
+                    file_path = os.path.join(self.__local_folder, filename)
+                    if file_path not in self.__file_list:
+                        self.__file_list.append(file_path)
+                    
                     self.__hashes[filename] = {
                         "hash": hash,
                         "last_modified": last_modified,
-                        "local_path": os.path.join(self.__local_folder, filename)
                     }
                 
                 with open(self.__hashes_file, "w+") as _file:
                     yaml.safe_dump(self.__hashes, _file)
                 
-                self.resume_signal.emit()
+                self.resume_signal.emit(self.__file_list)
                 
             sleep(300)

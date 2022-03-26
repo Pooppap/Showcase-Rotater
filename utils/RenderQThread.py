@@ -15,17 +15,19 @@ class RenderQThread(QtCore.QObject):
 
     def __init__(
         self,
+        file_list=None,
         default_fps=30.0,
         default_delay=10.0,
+        start_running=False,
         default_transition_time=1.0,
     ):
         super().__init__()
-        self.__running = False
         self.__pdf_ext = None
         self.__image_ext = None
         self.__video_ext = None
-        self.__file_list = None
         self.__last_frame = None
+        self.__file_list = file_list
+        self.__running = start_running
         self.__frame_size = (1920, 1080)
         self.__default_fps = default_fps
         self.__default_delay = default_delay
@@ -66,9 +68,6 @@ class RenderQThread(QtCore.QObject):
     def frame_size(self, value):
         assert isinstance(value, (tuple, list))
         self.__frame_size = value
-        
-    def update_file_list(self, file_list):
-        self.__file_list = deque(file_list)
         
     def pad_to_size(self, image):
         image_height, image_width , _ = image.shape
@@ -199,10 +198,13 @@ class RenderQThread(QtCore.QObject):
         self.__last_frame = self.convert_to_numpy(frame_qt)
         cap.release()
         
+    @QtCore.pyqtSlot()
     def pause_render(self):
         self.__running = False
-        
-    def resume_render(self):
+    
+    @QtCore.pyqtSlot(list)
+    def resume_render(self, file_list):
+        self.__file_list = deque(file_list)
         self.__running = True
 
     def run(self):
